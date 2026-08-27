@@ -1,0 +1,14 @@
+apiVersion: apps.chilkaditya.me/v1
+kind: CustomObservabilityStack
+metadata:
+  labels:
+    app.kubernetes.io/name: k8s-observability-op
+    app.kubernetes.io/managed-by: kustomize
+  name: customobservabilitystack-sample
+spec:
+  # TODO(user): Add fields here
+  targetDeployment: nginx-deployment
+  targetNamespace: default
+  cpuThresold: 75
+  memoryThresold: 80
+  enableDashboard: true
