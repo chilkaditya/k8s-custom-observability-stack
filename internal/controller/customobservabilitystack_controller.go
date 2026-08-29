@@ -21,13 +21,18 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	appsv1 "chilkaditya.me/k8s-observability-op/api/v1"
 	kappsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/types"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // CustomObservabilityStackReconciler reconciles a CustomObservabilityStack object
@@ -50,9 +55,11 @@ type CustomObservabilityStackReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
 func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// --------------------------------------------------
+	// 1. Fetch our CustomObservabilityStack CR
+	// --------------------------------------------------
 
 	var myobsStack appsv1.CustomObservabilityStack
 
@@ -60,18 +67,81 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	logger.Info(
+		"Reconcile custom observability stack",
+		"name", myobsStack.Name,
+		"namespace", myobsStack.Namespace,
+	)
+
+	// --------------------------------------------------
+	// 2. Fetch the target Deployment
+	// --------------------------------------------------
+
 	deployment := &kappsv1.Deployment{}
 
 	objKey := types.NamespacedName{
 		Name:      myobsStack.Spec.TargetDeployment,
 		Namespace: myobsStack.Spec.TargetNamespace,
 	}
-	fmt.Println("Reconciling ObservabilityStack")
 	if err := r.Get(ctx, objKey, deployment); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	fmt.Println(deployment.Name)
+	logger.Info(
+		"Deployment found",
+		"Deployment name", deployment.Name,
+	)
+
+	// --------------------------------------------------
+	// 3. Define the desired ConfigMap
+	// --------------------------------------------------
+
+	ConfigMapName := myobsStack.Name + "-dashboard"
+
+	desiredConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ConfigMapName,
+			Namespace: myobsStack.Spec.TargetNamespace,
+		},
+		Data: map[string]string{
+			"dashboard.json": fmt.Sprintf(`{
+			"title": "%s Dashboard",
+			"deployment": "%s"
+			}`, myobsStack.Spec.TargetDeployment, myobsStack.Spec.TargetDeployment),
+		},
+	}
+
+	if err := ctrl.SetControllerReference(
+		&myobsStack,
+		desiredConfigMap,
+		r.Scheme,
+	); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	existingConfigMap := &corev1.ConfigMap{}
+	configMapKey := types.NamespacedName{
+		Name:      ConfigMapName,
+		Namespace: myobsStack.Spec.TargetNamespace,
+	}
+
+	err := r.Get(ctx, configMapKey, existingConfigMap)
+
+	if apierrors.IsNotFound(err) {
+		logger.Info(
+			"Config map not found",
+			"configmap", ConfigMapName,
+		)
+		if err := r.Create(ctx, desiredConfigMap); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		logger.Info(
+			"ConfigMap created",
+			"ConfigMap", ConfigMapName,
+		)
+		return ctrl.Result{}, nil
+	}
 
 	return ctrl.Result{}, nil
 }
