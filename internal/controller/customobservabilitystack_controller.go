@@ -142,6 +142,10 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 		)
 		return ctrl.Result{}, nil
 	}
+	logger.Info(
+		"ConfigMap found",
+		"ConfigMap", ConfigMapName,
+	)
 
 	return ctrl.Result{}, nil
 }
@@ -150,6 +154,7 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 func (r *CustomObservabilityStackReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&appsv1.CustomObservabilityStack{}).
+		Owns(&corev1.ConfigMap{}).
 		Named("customobservabilitystack").
 		Complete(r)
 }
