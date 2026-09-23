@@ -41,12 +41,12 @@ spec:
             description: CustomObservabilityStackSpec defines the desired state of
               CustomObservabilityStack.
             properties:
-              cpuThresold:
+              cpuThreshold:
                 format: int32
                 type: integer
               enableDashboard:
                 type: boolean
-              memoryThresold:
+              memoryThreshold:
                 format: int32
                 type: integer
               targetDeployment:
@@ -57,9 +57,9 @@ spec:
               targetNamespace:
                 type: string
             required:
-            - cpuThresold
+            - cpuThreshold
             - enableDashboard
-            - memoryThresold
+            - memoryThreshold
             - targetDeployment
             - targetNamespace
             type: object

@@ -39,6 +39,7 @@ import (
 
 	appsv1 "chilkaditya.me/k8s-observability-op/api/v1"
 	"chilkaditya.me/k8s-observability-op/internal/controller"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -51,6 +52,10 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(appsv1.AddToScheme(scheme))
+
+	//my code
+	utilruntime.Must(monitoringv1.AddToScheme(scheme))
+
 	// +kubebuilder:scaffold:scheme
 }
 

@@ -18,7 +18,7 @@ package controller
 
 import (
 	"context"
-	"fmt"
+	"reflect"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,8 +31,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	appsv1 "chilkaditya.me/k8s-observability-op/api/v1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	kappsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // CustomObservabilityStackReconciler reconciles a CustomObservabilityStack object
@@ -98,20 +100,27 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 
 	ConfigMapName := myobsStack.Name + "-dashboard"
 
+	dashboardJSON, err := buildGrafanaDashboard(
+		myobsStack.Spec.TargetDeployment,
+	)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	desiredConfigMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ConfigMapName,
 			Namespace: myobsStack.Spec.TargetNamespace,
+			Labels: map[string]string{
+				"grafana_dashboard": "1",
+			},
 		},
 		Data: map[string]string{
-			"dashboard.json": fmt.Sprintf(`{
-			"title": "%s Dashboard",
-			"deployment": "%s"
-			}`, myobsStack.Spec.TargetDeployment, myobsStack.Spec.TargetDeployment),
+			"dashboard.json": dashboardJSON,
 		},
 	}
 
-	if err := ctrl.SetControllerReference(
+	if err := controllerutil.SetControllerReference(
 		&myobsStack,
 		desiredConfigMap,
 		r.Scheme,
@@ -125,7 +134,7 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 		Namespace: myobsStack.Spec.TargetNamespace,
 	}
 
-	err := r.Get(ctx, configMapKey, existingConfigMap)
+	err = r.Get(ctx, configMapKey, existingConfigMap)
 
 	if apierrors.IsNotFound(err) {
 		logger.Info(
@@ -142,10 +151,86 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 		)
 		return ctrl.Result{}, nil
 	}
-	logger.Info(
-		"ConfigMap found",
-		"ConfigMap", ConfigMapName,
+
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if existingConfigMap.Data["dashboard.json"] != dashboardJSON {
+		existingConfigMap.Data["dashboard.json"] = dashboardJSON
+
+		if err := r.Update(ctx, existingConfigMap); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		logger.Info(
+			"ConfigMap updated",
+			"ConfigMap", ConfigMapName,
+		)
+	}
+
+	// --------------------------------------------------
+	// 3. Define the desired prometheus rule
+	// --------------------------------------------------
+
+	desiredPromRule := buildPrometheusRule(
+		myobsStack.Spec.TargetDeployment,
+		myobsStack.Spec.CPUThreshold,
+		myobsStack.Spec.MemoryThreshold,
 	)
+
+	desiredPromRule.Name = myobsStack.Name + "-rules"
+	desiredPromRule.Namespace = myobsStack.Spec.TargetNamespace
+
+	if err := controllerutil.SetControllerReference(
+		&myobsStack,
+		desiredPromRule,
+		r.Scheme,
+	); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	existingPromRule := &monitoringv1.PrometheusRule{}
+
+	rulekey := types.NamespacedName{
+		Name:      desiredPromRule.Name,
+		Namespace: desiredPromRule.Namespace,
+	}
+
+	err = r.Get(ctx, rulekey, existingPromRule)
+
+	if apierrors.IsNotFound(err) {
+		logger.Info(
+			"Prometheus rule not found",
+			"Prometheus rule", desiredPromRule.Name,
+		)
+
+		if err := r.Create(ctx, desiredPromRule); err != nil {
+			return ctrl.Result{}, err
+		}
+		logger.Info(
+			"Prometheus rule created",
+			"Prometheus rule", desiredPromRule.Name,
+		)
+		return ctrl.Result{}, nil
+	}
+
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if !reflect.DeepEqual(existingPromRule.Spec, desiredPromRule.Spec) {
+		existingPromRule.Spec = desiredPromRule.Spec
+
+		if err := r.Update(ctx, existingPromRule); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		logger.Info(
+			"Prometheus rule updated",
+			"Prometheus rule", existingPromRule.Name,
+		)
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -155,6 +240,7 @@ func (r *CustomObservabilityStackReconciler) SetupWithManager(mgr ctrl.Manager) 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&appsv1.CustomObservabilityStack{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&monitoringv1.PrometheusRule{}).
 		Named("customobservabilitystack").
 		Complete(r)
 }

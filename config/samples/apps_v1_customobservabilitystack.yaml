@@ -9,6 +9,6 @@ spec:
   # TODO(user): Add fields here
   targetDeployment: nginx-deployment
   targetNamespace: default
-  cpuThresold: 75
-  memoryThresold: 80
+  cpuThreshold: 75
+  memoryThreshold: 80
   enableDashboard: true

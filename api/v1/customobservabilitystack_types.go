@@ -32,8 +32,8 @@ type CustomObservabilityStackSpec struct {
 	// Foo string `json:"foo,omitempty"`
 	TargetDeployment string `json:"targetDeployment"`
 	TargetNamespace  string `json:"targetNamespace"`
-	CPUThresold      int32  `json:"cpuThresold"`
-	MemoryThresold   int32  `json:"memoryThresold"`
+	CPUThreshold     int32  `json:"cpuThreshold"`
+	MemoryThreshold  int32  `json:"memoryThreshold"`
 	EnableDashboard  bool   `json:"enableDashboard"`
 }
 
