@@ -35,15 +35,25 @@ type CustomObservabilityStackSpec struct {
 	CPUThreshold     int32  `json:"cpuThreshold"`
 	MemoryThreshold  int32  `json:"memoryThreshold"`
 	EnableDashboard  bool   `json:"enableDashboard"`
+	MetricsPort      string `json:"metricsPort"`
+	MetricsPath      string `json:"metricsPath"`
 }
 
 // CustomObservabilityStackStatus defines the observed state of CustomObservabilityStack.
 type CustomObservabilityStackStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	Phase              string `json:"phase,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	LastReconcileTime  string `json:"lastReconcileTime,omitempty"`
+	// Conditions represent the current state of the observability stack.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// LastReconcileTime is the last time reconciliation completed.
+	// +optional
+	LastReconcileTime *metav1.Time `json:"lastReconcileTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true

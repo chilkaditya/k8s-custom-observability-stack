@@ -12,3 +12,5 @@ spec:
   cpuThreshold: 75
   memoryThreshold: 80
   enableDashboard: true
+  metricsPort: http
+  metricsPath: /metrics

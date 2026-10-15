@@ -18,10 +18,14 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+
+	meta "k8s.io/apimachinery/pkg/api/meta"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -85,8 +89,38 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 		Name:      myobsStack.Spec.TargetDeployment,
 		Namespace: myobsStack.Spec.TargetNamespace,
 	}
-	if err := r.Get(ctx, objKey, deployment); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	err := r.Get(ctx, objKey, deployment)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			message := fmt.Sprintf(
+				"Deployment %s/%s was not found",
+				myobsStack.Spec.TargetNamespace,
+				myobsStack.Spec.TargetDeployment,
+			)
+			if statusErr := r.setReadyCondition(
+				ctx,
+				&myobsStack,
+				metav1.ConditionFalse,
+				"TargetDeploymentNotFound",
+				message,
+			); statusErr != nil {
+				return ctrl.Result{}, statusErr
+			}
+			return ctrl.Result{
+				RequeueAfter: 30 * time.Second,
+			}, nil
+		}
+
+		if statusErr := r.setReadyCondition(
+			ctx,
+			&myobsStack,
+			metav1.ConditionFalse,
+			"DeploymentLookupFailed",
+			err.Error(),
+		); statusErr != nil {
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{}, err
 	}
 
 	logger.Info(
@@ -232,7 +266,123 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 		)
 	}
 
+	// --------------------------------------------------
+	// 3. Define the desired service monitor
+	// --------------------------------------------------
+
+	desiredServiceMonitor := buildServiceMonitor(
+		myobsStack.Spec.TargetDeployment,
+		myobsStack.Spec.MetricsPort,
+		myobsStack.Spec.MetricsPath,
+	)
+
+	desiredServiceMonitor.Name =
+		myobsStack.Spec.TargetDeployment + "-monitor"
+
+	desiredServiceMonitor.Namespace =
+		myobsStack.Spec.TargetNamespace
+
+	if err := controllerutil.SetControllerReference(
+		&myobsStack,
+		desiredServiceMonitor,
+		r.Scheme,
+	); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	existingServiceMonitor := &monitoringv1.ServiceMonitor{}
+
+	ServiceMonitorKey := types.NamespacedName{
+		Name:      desiredServiceMonitor.Name,
+		Namespace: desiredServiceMonitor.Namespace,
+	}
+
+	err = r.Get(ctx, ServiceMonitorKey, existingServiceMonitor)
+
+	if apierrors.IsNotFound(err) {
+
+		logger.Info(
+			"ServiceMonitor Not found",
+			"ServiceMonitor",
+			desiredServiceMonitor.Name,
+		)
+
+		if err := r.Create(
+			ctx,
+			desiredServiceMonitor,
+		); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		logger.Info(
+			"ServiceMonitor created",
+			"ServiceMonitor",
+			desiredServiceMonitor.Name,
+		)
+
+	} else if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if !reflect.DeepEqual(existingServiceMonitor.Spec, desiredServiceMonitor.Spec) {
+
+		logger.Info(
+			"ServiceMonitor Found",
+			"ServiceMonitor",
+			desiredServiceMonitor.Name,
+		)
+
+		existingServiceMonitor.Spec =
+			desiredServiceMonitor.Spec
+
+		if err := r.Update(
+			ctx,
+			existingServiceMonitor,
+		); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		logger.Info(
+			"ServiceMonitor updated",
+			"ServiceMonitor",
+			desiredServiceMonitor.Name,
+		)
+	}
+
+	if err := r.setReadyCondition(
+		ctx,
+		&myobsStack,
+		metav1.ConditionTrue,
+		"ReconciliationsSucceeded",
+		"Dashboard, alert rules, and ServiceMonitor are configured",
+	); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
+}
+
+func (r *CustomObservabilityStackReconciler) setReadyCondition(
+	ctx context.Context,
+	stack *appsv1.CustomObservabilityStack,
+	status metav1.ConditionStatus,
+	reason string,
+	message string,
+) error {
+	condition := metav1.Condition{
+		Type:               "Ready",
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: stack.Generation,
+	}
+	meta.SetStatusCondition(&stack.Status.Conditions, condition)
+	stack.Status.ObservedGeneration = stack.Generation
+
+	now := metav1.Now()
+	stack.Status.LastReconcileTime = &now
+
+	return r.Status().Update(ctx, stack)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -241,6 +391,7 @@ func (r *CustomObservabilityStackReconciler) SetupWithManager(mgr ctrl.Manager) 
 		For(&appsv1.CustomObservabilityStack{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&monitoringv1.PrometheusRule{}).
+		Owns(&monitoringv1.ServiceMonitor{}).
 		Named("customobservabilitystack").
 		Complete(r)
 }
