@@ -28,6 +28,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	appsv1 "chilkaditya.me/k8s-observability-op/api/v1"
+	appsapi "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("CustomObservabilityStack Controller", func() {
@@ -52,8 +54,54 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 						Namespace: "default",
 					},
 					// TODO(user): Specify other spec details if needed.
+					Spec: appsv1.CustomObservabilityStackSpec{
+						TargetDeployment: "nginx-deployment",
+						TargetNamespace:  "default",
+						CPUThreshold:     75,
+						MemoryThreshold:  80,
+						EnableDashboard:  true,
+						MetricsPort:      "http",
+						MetricsPath:      "/metrics",
+					},
 				}
+				deployment := &appsapi.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "nginx-deployment",
+						Namespace: "default",
+					},
+					Spec: appsapi.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"app": "nginx",
+							},
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"app": "nginx",
+								},
+							},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "nginx",
+										Image: "nginx:latest",
+										Ports: []corev1.ContainerPort{
+											{
+												Name:          "http",
+												ContainerPort: 80,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+				By("creating the target Deployment")
+				Expect(k8sClient.Create(ctx, deployment)).To(Succeed())
 			}
 		})
 
