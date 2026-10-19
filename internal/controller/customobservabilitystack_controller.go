@@ -183,22 +183,30 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 			"ConfigMap created",
 			"ConfigMap", ConfigMapName,
 		)
-		return ctrl.Result{}, nil
-	}
-
-	if err != nil {
+		// return ctrl.Result{}, nil
+	} else if err != nil {
 		return ctrl.Result{}, err
-	}
-
-	if existingConfigMap.Data["dashboard.json"] != dashboardJSON {
-		existingConfigMap.Data["dashboard.json"] = dashboardJSON
-
-		if err := r.Update(ctx, existingConfigMap); err != nil {
-			return ctrl.Result{}, err
-		}
+	} else if apierrors.IsAlreadyExists(err) {
 
 		logger.Info(
-			"ConfigMap updated",
+			"ConfigMap found",
+			"ConfigMap", ConfigMapName,
+		)
+
+		if existingConfigMap.Data["dashboard.json"] != dashboardJSON {
+			existingConfigMap.Data["dashboard.json"] = dashboardJSON
+
+			if err := r.Update(ctx, existingConfigMap); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			logger.Info(
+				"ConfigMap updated",
+				"ConfigMap", ConfigMapName,
+			)
+		}
+		logger.Info(
+			"ConfigMap unchanged",
 			"ConfigMap", ConfigMapName,
 		)
 	}
@@ -246,22 +254,30 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 			"Prometheus rule created",
 			"Prometheus rule", desiredPromRule.Name,
 		)
-		return ctrl.Result{}, nil
-	}
-
-	if err != nil {
+		// return ctrl.Result{}, nil
+	} else if err != nil {
 		return ctrl.Result{}, err
-	}
-
-	if !reflect.DeepEqual(existingPromRule.Spec, desiredPromRule.Spec) {
-		existingPromRule.Spec = desiredPromRule.Spec
-
-		if err := r.Update(ctx, existingPromRule); err != nil {
-			return ctrl.Result{}, err
-		}
+	} else if apierrors.IsAlreadyExists(err) {
 
 		logger.Info(
-			"Prometheus rule updated",
+			"Prometheus found",
+			"Prometheus rule", existingPromRule.Name,
+		)
+
+		if !reflect.DeepEqual(existingPromRule.Spec, desiredPromRule.Spec) {
+			existingPromRule.Spec = desiredPromRule.Spec
+
+			if err := r.Update(ctx, existingPromRule); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			logger.Info(
+				"Prometheus rule updated",
+				"Prometheus rule", existingPromRule.Name,
+			)
+		}
+		logger.Info(
+			"Prometheus rule unchanged",
 			"Prometheus rule", existingPromRule.Name,
 		)
 	}
@@ -307,10 +323,14 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 			desiredServiceMonitor.Name,
 		)
 
-		if err := r.Create(
-			ctx,
-			desiredServiceMonitor,
-		); err != nil {
+		if err := r.Create(ctx, desiredServiceMonitor); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				logger.Info(
+					"ServiceMonitor already exists; will reconcile again",
+					"ServiceMonitor", desiredServiceMonitor.Name,
+				)
+				return ctrl.Result{RequeueAfter: time.Second}, nil
+			}
 			return ctrl.Result{}, err
 		}
 
@@ -319,34 +339,40 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 			"ServiceMonitor",
 			desiredServiceMonitor.Name,
 		)
+		// return ctrl.Result{}, nil
 
 	} else if err != nil {
 		return ctrl.Result{}, err
-	}
-
-	if !reflect.DeepEqual(existingServiceMonitor.Spec, desiredServiceMonitor.Spec) {
+	} else {
 
 		logger.Info(
 			"ServiceMonitor Found",
-			"ServiceMonitor",
-			desiredServiceMonitor.Name,
+			"ServiceMonitor", desiredServiceMonitor.Name,
 		)
 
-		existingServiceMonitor.Spec =
-			desiredServiceMonitor.Spec
+		if !reflect.DeepEqual(existingServiceMonitor.Spec, desiredServiceMonitor.Spec) {
 
-		if err := r.Update(
-			ctx,
-			existingServiceMonitor,
-		); err != nil {
-			return ctrl.Result{}, err
+			existingServiceMonitor.Spec =
+				desiredServiceMonitor.Spec
+
+			if err := r.Update(
+				ctx,
+				existingServiceMonitor,
+			); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			logger.Info(
+				"ServiceMonitor updated",
+				"ServiceMonitor",
+				desiredServiceMonitor.Name,
+			)
+		} else {
+			logger.Info(
+				"ServiceMonitor unchanged",
+				"ServiceMonitor", desiredServiceMonitor.Name,
+			)
 		}
-
-		logger.Info(
-			"ServiceMonitor updated",
-			"ServiceMonitor",
-			desiredServiceMonitor.Name,
-		)
 	}
 
 	if err := r.setReadyCondition(
