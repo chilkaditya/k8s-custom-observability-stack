@@ -24,6 +24,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 
 	meta "k8s.io/apimachinery/pkg/api/meta"
 
@@ -176,6 +177,13 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 			"configmap", ConfigMapName,
 		)
 		if err := r.Create(ctx, desiredConfigMap); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				logger.Info(
+					"Config map already exists; will reconcile again",
+					"configmap", ConfigMapName,
+				)
+				return ctrl.Result{RequeueAfter: time.Second}, nil
+			}
 			return ctrl.Result{}, err
 		}
 
@@ -183,10 +191,11 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 			"ConfigMap created",
 			"ConfigMap", ConfigMapName,
 		)
-		// return ctrl.Result{}, nil
+
 	} else if err != nil {
+
 		return ctrl.Result{}, err
-	} else if apierrors.IsAlreadyExists(err) {
+	} else {
 
 		logger.Info(
 			"ConfigMap found",
@@ -248,20 +257,28 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 		)
 
 		if err := r.Create(ctx, desiredPromRule); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				logger.Info(
+					"Prometheus rule already exists; will reconcile again",
+					"Prometheus rule", desiredPromRule.Name,
+				)
+				return ctrl.Result{RequeueAfter: time.Second}, nil
+			}
 			return ctrl.Result{}, err
 		}
 		logger.Info(
 			"Prometheus rule created",
 			"Prometheus rule", desiredPromRule.Name,
 		)
-		// return ctrl.Result{}, nil
+		
 	} else if err != nil {
+
 		return ctrl.Result{}, err
-	} else if apierrors.IsAlreadyExists(err) {
+	} else {
 
 		logger.Info(
-			"Prometheus found",
-			"Prometheus rule", existingPromRule.Name,
+			"Prometheus rule found",
+			"PrometheusRule", existingPromRule.Name,
 		)
 
 		if !reflect.DeepEqual(existingPromRule.Spec, desiredPromRule.Spec) {
@@ -339,9 +356,9 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 			"ServiceMonitor",
 			desiredServiceMonitor.Name,
 		)
-		// return ctrl.Result{}, nil
 
 	} else if err != nil {
+
 		return ctrl.Result{}, err
 	} else {
 
@@ -395,20 +412,32 @@ func (r *CustomObservabilityStackReconciler) setReadyCondition(
 	reason string,
 	message string,
 ) error {
-	condition := metav1.Condition{
-		Type:               "Ready",
-		Status:             status,
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: stack.Generation,
+	key := types.NamespacedName{
+		Name:      stack.Name,
+		Namespace: stack.Namespace,
 	}
-	meta.SetStatusCondition(&stack.Status.Conditions, condition)
-	stack.Status.ObservedGeneration = stack.Generation
 
-	now := metav1.Now()
-	stack.Status.LastReconcileTime = &now
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch the latest version on every retry.
+		latest := &appsv1.CustomObservabilityStack{}
+		if err := r.Get(ctx, key, latest); err != nil {
+			return err
+		}
+		condition := metav1.Condition{
+			Type:               "Ready",
+			Status:             status,
+			Reason:             reason,
+			Message:            message,
+			ObservedGeneration: latest.Generation,
+		}
+		meta.SetStatusCondition(&latest.Status.Conditions, condition)
+		latest.Status.ObservedGeneration = latest.Generation
 
-	return r.Status().Update(ctx, stack)
+		now := metav1.Now()
+		latest.Status.LastReconcileTime = &now
+
+		return r.Status().Update(ctx, latest)
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager.
