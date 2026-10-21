@@ -310,7 +310,7 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 	)
 
 	desiredServiceMonitor.Name =
-		myobsStack.Spec.TargetDeployment + "-monitor"
+		myobsStack.Name + "-monitor"
 
 	desiredServiceMonitor.Namespace =
 		myobsStack.Spec.TargetNamespace
