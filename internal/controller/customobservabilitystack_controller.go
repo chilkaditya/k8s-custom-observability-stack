@@ -270,7 +270,7 @@ func (r *CustomObservabilityStackReconciler) Reconcile(ctx context.Context, req 
 			"Prometheus rule created",
 			"Prometheus rule", desiredPromRule.Name,
 		)
-		
+
 	} else if err != nil {
 
 		return ctrl.Result{}, err
@@ -423,6 +423,10 @@ func (r *CustomObservabilityStackReconciler) setReadyCondition(
 		if err := r.Get(ctx, key, latest); err != nil {
 			return err
 		}
+
+		// Preserve the original status for comparison.
+		originalStatus := latest.Status.DeepCopy()
+
 		condition := metav1.Condition{
 			Type:               "Ready",
 			Status:             status,
@@ -432,6 +436,12 @@ func (r *CustomObservabilityStackReconciler) setReadyCondition(
 		}
 		meta.SetStatusCondition(&latest.Status.Conditions, condition)
 		latest.Status.ObservedGeneration = latest.Generation
+
+		statusChanged := !reflect.DeepEqual(originalStatus.Conditions, latest.Status.Conditions) || latest.Status.ObservedGeneration != originalStatus.ObservedGeneration
+
+		if !statusChanged {
+			return nil
+		}
 
 		now := metav1.Now()
 		latest.Status.LastReconcileTime = &now
