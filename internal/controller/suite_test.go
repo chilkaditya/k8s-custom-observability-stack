@@ -63,14 +63,13 @@ var _ = BeforeSuite(func() {
 	err = appsv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	Expect(monitoringv1.AddToScheme(scheme.Scheme)).
-    To(Succeed())
+	Expect(monitoringv1.AddToScheme(scheme.Scheme)).To(Succeed())
 
 	// +kubebuilder:scaffold:scheme
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{
+		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
 			filepath.Join("..", "..", "config", "test-crds", "prometheus-operator"),
 		},
