@@ -39,11 +39,17 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
+		const (
+			testNamespace      = "default"
+			testDeploymentName = "nginx-deployment"
+			testAppLabel       = "nginx"
+		)
+
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: testNamespace, // TODO(user):Modify as needed
 		}
 		// customobservabilitystack := &appsv1.CustomObservabilityStack{}
 
@@ -51,8 +57,8 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 			By("creating the target Deployment if it does not exist")
 
 			deploymentKey := types.NamespacedName{
-				Name:      "nginx-deployment",
-				Namespace: "default",
+				Name:      testDeploymentName,
+				Namespace: testNamespace,
 			}
 
 			deployment := &appsapi.Deployment{}
@@ -61,20 +67,20 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 			if errors.IsNotFound(err) {
 				deployment = &appsapi.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "nginx-deployment",
-						Namespace: "default",
+						Name:      testDeploymentName,
+						Namespace: testNamespace,
 					},
 					Spec: appsapi.DeploymentSpec{
 						Selector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{"app": "nginx"},
+							MatchLabels: map[string]string{"app": testAppLabel},
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: map[string]string{"app": "nginx"},
+								Labels: map[string]string{"app": testAppLabel},
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{{
-									Name:  "nginx",
+									Name:  testAppLabel,
 									Image: "nginx:latest",
 									Ports: []corev1.ContainerPort{{
 										Name:          "http",
@@ -99,11 +105,11 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 				resource = &appsv1.CustomObservabilityStack{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
-						Namespace: "default",
+						Namespace: testNamespace,
 					},
 					Spec: appsv1.CustomObservabilityStackSpec{
-						TargetDeployment: "nginx-deployment",
-						TargetNamespace:  "default",
+						TargetDeployment: testDeploymentName,
+						TargetNamespace:  testNamespace,
 						CPUThreshold:     75,
 						MemoryThreshold:  80,
 						EnableDashboard:  true,
@@ -123,7 +129,7 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 			configMap := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "customobservabilitystack-sample-dashboard",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 			}
 			err := k8sClient.Delete(ctx, configMap)
@@ -134,7 +140,7 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 			promRule := &monitoringv1.PrometheusRule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "customobservabilitystack-sample-rules",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 			}
 			err = k8sClient.Delete(ctx, promRule)
@@ -145,7 +151,7 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 			serviceMonitor := &monitoringv1.ServiceMonitor{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "customobservabilitystack-sample-monitor",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 			}
 			err = k8sClient.Delete(ctx, serviceMonitor)
@@ -155,8 +161,8 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 
 			deployment := &appsapi.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "nginx-deployment",
-					Namespace: "default",
+					Name:      testDeploymentName,
+					Namespace: testNamespace,
 				},
 			}
 			err = k8sClient.Delete(ctx, deployment)
@@ -167,7 +173,7 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 			resource := &appsv1.CustomObservabilityStack{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 			}
 			err = k8sClient.Delete(ctx, resource)
@@ -193,7 +199,7 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 			configMap := &corev1.ConfigMap{}
 			configMapKey := types.NamespacedName{
 				Name:      "test-resource-dashboard",
-				Namespace: "default",
+				Namespace: testNamespace,
 			}
 
 			Expect(k8sClient.Get(ctx, configMapKey, configMap)).
@@ -206,7 +212,7 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 			promRule := &monitoringv1.PrometheusRule{}
 			promRuleKey := types.NamespacedName{
 				Name:      "test-resource-rules",
-				Namespace: "default",
+				Namespace: testNamespace,
 			}
 
 			Expect(k8sClient.Get(ctx, promRuleKey, promRule)).
@@ -217,7 +223,7 @@ var _ = Describe("CustomObservabilityStack Controller", func() {
 			serviceMonitor := &monitoringv1.ServiceMonitor{}
 			serviceMonitorKey := types.NamespacedName{
 				Name:      "test-resource-monitor",
-				Namespace: "default",
+				Namespace: testNamespace,
 			}
 
 			Expect(k8sClient.Get(ctx, serviceMonitorKey, serviceMonitor)).

@@ -53,7 +53,7 @@ func init() {
 
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 
-	//my code
+	// my code
 	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 
 	// +kubebuilder:scaffold:scheme
