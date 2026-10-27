@@ -52,6 +52,18 @@ type CustomObservabilityStackReconciler struct {
 // +kubebuilder:rbac:groups=apps.chilkaditya.me,resources=customobservabilitystacks/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps.chilkaditya.me,resources=customobservabilitystacks/finalizers,verbs=update
 
+// Core Kubernetes resources: Grafana dashboard ConfigMaps
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
+
+// Target application Deployments
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch
+
+// Prometheus alert rules
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=prometheusrules,verbs=get;list;watch;create;update;patch
+
+// Prometheus ServiceMonitor resources
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;update;patch
+
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by

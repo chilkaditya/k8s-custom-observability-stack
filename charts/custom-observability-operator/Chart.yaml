@@ -1,0 +1,6 @@
+apiVersion: v2
+name: custom-observability-operator
+description: A Kubernetes operator for automated observability configuration
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
